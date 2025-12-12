@@ -11,3 +11,4 @@ Once the setup says "Setup was successful," close it and open your Command Promp
 Run this command to install the tools (Pandas, OR-Tools, xlwings):
 https://www.python.org/ftp/python/3.12.8/python-3.12.8-amd64.exe
 py -3.12 -m pip install pandas ortools xlwings openpyxl
+py -3.12 -c "import sys; print(sys.executable)"
