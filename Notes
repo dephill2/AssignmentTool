@@ -1,0 +1,12 @@
+Step 1: Download the Installer
+Click this link to download the official Windows installer for Python 3.12: Download Python 3.12 (64-bit Installer)
+Step 2: Run the Installer (The Most Important Step)
+1.	Double-click the file you just downloaded (python-3.12.x-amd64.exe).
+2.	STOP! Look at the bottom of the installation window.
+3.	CHECK THE BOX that says: "Add python.exe to PATH".
+o	If you miss this, the command line won't work.
+4.	Click Install Now.
+Step 3: Install the Libraries
+Once the setup says "Setup was successful," close it and open your Command Prompt.
+Run this command to install the tools (Pandas, OR-Tools, xlwings):
+
