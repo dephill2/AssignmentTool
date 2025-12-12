@@ -9,4 +9,4 @@ o	If you miss this, the command line won't work.
 Step 3: Install the Libraries
 Once the setup says "Setup was successful," close it and open your Command Prompt.
 Run this command to install the tools (Pandas, OR-Tools, xlwings):
-
+https://www.python.org/ftp/python/3.12.8/python-3.12.8-amd64.exe
