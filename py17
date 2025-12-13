@@ -1,0 +1,48 @@
+import pandas as pd
+
+# Default output
+output_df = pd.DataFrame(["No Data"])
+
+try:
+    # 1. SETUP
+    df_sites = xl("SiteTable[#All]", headers=True)
+    df_inputs = xl("InputTable[#All]", headers=True)
+    
+    # Clean Data
+    df_sites = df_sites[df_sites['facilityName'].str.lower() != 'total'] # Remove Total row
+    df_sites['TotalCensus'] = pd.to_numeric(df_sites['TotalCensus'], errors='coerce').fillna(0)
+    df_sites = df_sites.sort_values('TotalCensus', ascending=False)
+    
+    # 2. ASSIGNMENT LOGIC
+    num_rns = int(df_inputs.loc[df_inputs['Variable'] == 'Num_RNs', 'Value'].iloc[0])
+    aprn_list = ['ASH', 'BEC', 'BHH', 'CAV', 'CHY', 'FAR', 'FAV', 'FHM', 'LEA', 'LEB', 'LKC', 'MAR', 'MUS', 'SUX', 'TOP', 'WIM', 'BIL', 'CLA', 'CTX', 'GRJ', 'MOU', 'WIC', 'BRX', 'CMS', 'DET', 'MWV', 'TOG', 'SBY']
+    
+    rns = [{'id': f"RN {i+1}", 'census': 0, 'count': 0} for i in range(num_rns)]
+    assignments = []
+
+    for _, row in df_sites.iterrows():
+        name = row['facilityName']
+        cen = row['TotalCensus']
+        orig = row['SiteCode']
+        
+        rns.sort(key=lambda x: x['census'])
+        assigned = False
+        for rn in rns:
+            if (rn['census'] + cen <= 55) and (rn['count'] < 7):
+                rn['census'] += cen
+                rn['count'] += 1
+                is_aprn = "Yes" if orig in aprn_list else "No"
+                assignments.append([rn['id'], name, int(cen), is_aprn])
+                assigned = True
+                break
+        if not assigned:
+            assignments.append(["UNASSIGNED", name, int(cen), "No"])
+
+    # 3. OUTPUT (Set Index to RN to remove random numbers)
+    df_out = pd.DataFrame(assignments, columns=["RN", "Site", "Census", "APRN?"])
+    output_df = df_out.sort_values(by=['RN', 'Census'], ascending=[True, False]).set_index('RN')
+
+except Exception as e:
+    output_df = pd.DataFrame([f"Error: {str(e)}"])
+
+output_df
