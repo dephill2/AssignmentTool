@@ -1,0 +1,59 @@
+import pandas as pd
+
+try:
+    # 1. LOAD TABLES
+    df_sites = xl("SiteTable[#All]", headers=True)
+    df_inputs = xl("InputTable[#All]", headers=True)
+    num_rns = int(df_inputs.loc[df_inputs['Variable'] == 'Num_RNs', 'Value'].iloc[0])
+    num_teams = int(df_inputs.loc[df_inputs['Variable'] == 'Num_Providers', 'Value'].iloc[0])
+
+    # 2. PREPARE DATA
+    df_sites['TotalCensus'] = pd.to_numeric(df_sites['TotalCensus'], errors='coerce').fillna(0)
+    df_sites = df_sites.sort_values('TotalCensus', ascending=False)
+    
+    # 3. CALCULATE RNs (Greedy)
+    rns = [{'id': f"RN {i+1}", 'census': 0, 'count': 0} for i in range(num_rns)]
+    rn_map = {} 
+
+    for _, row in df_sites.iterrows():
+        name = row['facilityName']
+        cen = row['TotalCensus']
+        rns.sort(key=lambda x: x['census']) 
+        assigned = False
+        for rn in rns:
+            if (rn['census'] + cen <= 55) and (rn['count'] < 7):
+                rn_map[name] = rn['id']
+                rn['census'] += cen
+                rn['count'] += 1
+                assigned = True
+                break
+        if not assigned: rn_map[name] = "UNASSIGNED"
+
+    # 4. PROVIDER MAPPING (Condensed for safety)
+    prov_map = {}
+    
+    # Mapping for 4 Teams (Safe Copy)
+    team_4 = {
+        1: ['Ann Arbor', 'Asheville', 'Augusta', 'Bay Pines', 'Beckley', 'Bronx', 'Cincinnati', 'Clarksburg', 'Columbia, SC', 'Connecticut', 'Dayton', 'Detroit', 'Huntington','Hampton', 'Lebanon', 'Northern Indiana', 'NYN-New York Harbor','BYN-New York Harbor', 'Salisbury', 'ALN-Upstate New York', 'BUF-Upstate New York', 'SYR-Upstate New York','White River Junction', 'Wilmington', 'Wilkes-Barre'],
+        2: ['Albuquerque', 'Amarillo', 'Cheyenne', 'Denver', 'Grand Junction', 'Houston', 'Iowa City', 'Marion', 'Muskogee', 'Nellis AFB DOD', 'Oklahoma City', 'Palo Alto', 'San Juan', 'Reno', 'Spokane', 'St. Louis', 'Topeka', 'Tucson', 'Wichita'],
+        3: ['Atlanta', 'Baltimore', 'Birmingham', 'Central Alabama', 'Fayetteville, NC', 'Indianapolis', 'Martinsburg', 'Memphis', 'Mountain Home', 'North Florida/South Georgia', 'New Jersey', 'Northport', 'Orlando', 'Richmond', 'Togus', 'Washington DC', 'Black Hills', 'Loma Linda'],
+        4: ['Biloxi', 'Boise', 'Columbia, MO', 'Des Moines', 'Fargo', 'Fayetteville, AR', 'Fresno', 'Fort Harrison', 'Jackson', 'Kansas City', 'Las Vegas', 'Leavenworth', 'Little Rock', 'Minneapolis', 'New Orleans', 'Omaha', 'Phoenix', 'Sacramento', 'Shreveport', 'Sioux Falls', 'Temple (Central Texas)', 'West Los Angeles', 'Cleveland']
+    }
+    
+    # Apply Mapping
+    if num_teams == 4:
+        for team, sites in team_4.items():
+            for s in sites:
+                prov_map[s] = f"Team {team}"
+    
+    # 5. BUILD OUTPUT
+    crosswalk = []
+    for name in sorted(df_sites['facilityName'].unique()):
+        rn = rn_map.get(name, "Unassigned")
+        prov = prov_map.get(name, "Unassigned")
+        crosswalk.append([name, rn, prov])
+
+    pd.DataFrame(crosswalk, columns=["Site Name", "Assigned RN", "Assigned Provider"])
+
+except Exception as e:
+    pd.DataFrame([f"Error: {str(e)}"])
