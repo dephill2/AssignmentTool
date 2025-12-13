@@ -1,0 +1,34 @@
+import pandas as pd
+
+# 1. Initialize Default Output
+output_df = pd.DataFrame(["No Data Generated"])
+
+try:
+    df_sites = xl("SiteTable[#All]", headers=True)
+    df_inputs = xl("InputTable[#All]", headers=True)
+    num_teams = int(df_inputs.loc[df_inputs['Variable'] == 'Num_Providers', 'Value'].iloc[0])
+    
+    team_4 = {
+        1: ['Ann Arbor', 'Asheville', 'Augusta', 'Bay Pines', 'Beckley', 'Bronx', 'Cincinnati', 'Clarksburg', 'Columbia, SC', 'Connecticut', 'Dayton', 'Detroit', 'Huntington','Hampton', 'Lebanon', 'Northern Indiana', 'NYN-New York Harbor','BYN-New York Harbor', 'Salisbury', 'ALN-Upstate New York', 'BUF-Upstate New York', 'SYR-Upstate New York','White River Junction', 'Wilmington', 'Wilkes-Barre'],
+        2: ['Albuquerque', 'Amarillo', 'Cheyenne', 'Denver', 'Grand Junction', 'Houston', 'Iowa City', 'Marion', 'Muskogee', 'Nellis AFB DOD', 'Oklahoma City', 'Palo Alto', 'San Juan', 'Reno', 'Spokane', 'St. Louis', 'Topeka', 'Tucson', 'Wichita'],
+        3: ['Atlanta', 'Baltimore', 'Birmingham', 'Central Alabama', 'Fayetteville, NC', 'Indianapolis', 'Martinsburg', 'Memphis', 'Mountain Home', 'North Florida/South Georgia', 'New Jersey', 'Northport', 'Orlando', 'Richmond', 'Togus', 'Washington DC', 'Black Hills', 'Loma Linda'],
+        4: ['Biloxi', 'Boise', 'Columbia, MO', 'Des Moines', 'Fargo', 'Fayetteville, AR', 'Fresno', 'Fort Harrison', 'Jackson', 'Kansas City', 'Las Vegas', 'Leavenworth', 'Little Rock', 'Minneapolis', 'New Orleans', 'Omaha', 'Phoenix', 'Sacramento', 'Shreveport', 'Sioux Falls', 'Temple (Central Texas)', 'West Los Angeles', 'Cleveland']
+    }
+    
+    rows = []
+    if num_teams == 4:
+        for team, sites in team_4.items():
+            team_data = df_sites[df_sites['facilityName'].isin(sites)].copy()
+            if not team_data.empty:
+                team_data = team_data.sort_values(by='Categories')
+                for _, r in team_data.iterrows():
+                    rows.append([f"Team {team}", int(r['Categories']), r['facilityName'], int(r['TotalCensus'])])
+
+    # 4. ASSIGN FINAL OUTPUT
+    output_df = pd.DataFrame(rows, columns=["Team", "Cat", "Site", "Census"])
+
+except Exception as e:
+    output_df = pd.DataFrame([f"Error: {str(e)}"])
+
+# 5. FINAL RETURN (Must be the last line)
+output_df
