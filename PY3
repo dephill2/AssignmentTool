@@ -1,0 +1,45 @@
+import pandas as pd
+df_sites = xl("SiteTable[#All]", headers=True)
+df_inputs = xl("InputTable[#All]", headers=True)
+
+# INPUTS
+num_teams = int(df_inputs.loc[df_inputs['Variable'] == 'Num_Providers', 'Value'].iloc[0])
+df_sites['TotalCensus'] = pd.to_numeric(df_sites['TotalCensus'], errors='coerce').fillna(0)
+
+# PROVIDER MAPPING (Condensed for Excel)
+# Format: {NumTeams: {TeamNum: [List of Sites]}}
+site_groups = {
+    4: {
+        1: ['Ann Arbor', 'Asheville', 'Augusta', 'Bay Pines', 'Beckley', 'Bronx', 'Cincinnati', 'Clarksburg', 'Columbia, SC', 'Connecticut', 'Dayton', 'Detroit', 'Huntington','Hampton', 'Lebanon', 'Northern Indiana', 'NYN-New York Harbor','BYN-New York Harbor', 'Salisbury', 'ALN-Upstate New York', 'BUF-Upstate New York', 'SYR-Upstate New York','White River Junction', 'Wilmington', 'Wilkes-Barre'],
+        2: ['Albuquerque', 'Amarillo', 'Cheyenne', 'Denver', 'Grand Junction', 'Houston', 'Iowa City', 'Marion', 'Muskogee', 'Nellis AFB DOD', 'Oklahoma City', 'Palo Alto', 'San Juan', 'Reno', 'Spokane', 'St. Louis', 'Topeka', 'Tucson', 'Wichita'],
+        3: ['Atlanta', 'Baltimore', 'Birmingham', 'Central Alabama', 'Fayetteville, NC', 'Indianapolis', 'Martinsburg', 'Memphis', 'Mountain Home', 'North Florida/South Georgia', 'New Jersey', 'Northport', 'Orlando', 'Richmond', 'Togus', 'Washington DC', 'Black Hills', 'Loma Linda'],
+        4: ['Biloxi', 'Boise', 'Columbia, MO', 'Des Moines', 'Fargo', 'Fayetteville, AR', 'Fresno', 'Fort Harrison', 'Jackson', 'Kansas City', 'Las Vegas', 'Leavenworth', 'Little Rock', 'Minneapolis', 'New Orleans', 'Omaha', 'Phoenix', 'Sacramento', 'Shreveport', 'Sioux Falls', 'Temple (Central Texas)', 'West Los Angeles', 'Cleveland']
+    }
+    # (You can add the other mappings for 2, 3, 5, 6, 7, 8 here if needed)
+}
+
+rows = []
+if num_teams in site_groups:
+    teams = site_groups[num_teams]
+    for team_id, site_list in teams.items():
+        team_census = 0
+        assigned_str = []
+        
+        # Filter sites that exist in your current data
+        # We check both exact match and 'facilityName' match
+        current_team_sites = df_sites[df_sites['facilityName'].isin(site_list)]
+        
+        # Sort by Category if available, else Census
+        if 'Categories' in current_team_sites.columns:
+            current_team_sites = current_team_sites.sort_values('Categories')
+        
+        for _, s in current_team_sites.iterrows():
+            cen = int(s['TotalCensus'])
+            team_census += cen
+            assigned_str.append(f"{s['facilityName']} ({cen})")
+            
+        rows.append([f"Team {team_id}", team_census, ", ".join(assigned_str)])
+else:
+    rows.append(["Error", 0, "No mapping found for this provider count"])
+
+pd.DataFrame(rows, columns=["Provider Team", "Est. Census", "Sites"])
