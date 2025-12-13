@@ -1,0 +1,52 @@
+import pandas as pd
+
+try:
+    # 1. LOAD TABLES
+    df_sites = xl("SiteTable[#All]", headers=True)
+    df_inputs = xl("InputTable[#All]", headers=True)
+    
+    # 2. GET INPUTS (With Error Checking)
+    try:
+        num_rns = int(df_inputs.loc[df_inputs['Variable'] == 'Num_RNs', 'Value'].iloc[0])
+        num_teams = int(df_inputs.loc[df_inputs['Variable'] == 'Num_Providers', 'Value'].iloc[0])
+    except:
+        raise ValueError("Check InputTable. Needs 'Num_RNs' and 'Num_Providers'.")
+
+    # 3. PREPARE DATA
+    df_sites['TotalCensus'] = pd.to_numeric(df_sites['TotalCensus'], errors='coerce').fillna(0)
+    df_sites = df_sites.sort_values('TotalCensus', ascending=False)
+    
+    # 4. CALCULATE RNs (Re-running logic to map RNs)
+    rns = [{'id': f"RN {i+1}", 'census': 0, 'count': 0} for i in range(num_rns)]
+    rn_map = {} 
+
+    for _, row in df_sites.iterrows():
+        name = row['facilityName']
+        cen = row['TotalCensus']
+        rns.sort(key=lambda x: x['census']) 
+        
+        assigned = False
+        for rn in rns:
+            if (rn['census'] + cen <= 55) and (rn['count'] < 7):
+                rn_map[name] = rn['id']
+                rn['census'] += cen
+                rn['count'] += 1
+                assigned = True
+                break
+        if not assigned: rn_map[name] = "UNASSIGNED"
+
+    # 5. FULL PROVIDER DATABASE (Teams 2-8)
+    site_groups = {
+        2: {1: ['Ann Arbor', 'Asheville', 'Atlanta', 'Augusta', 'Baltimore', 'Bay Pines', 'Biloxi', 'Black Hills', 'Beckley', 'Birmingham', 'Bronx', 'Central Alabama', 'Cincinnati', 'Clarksburg', 'Cleveland', 'Columbia, SC', 'Connecticut', 'Dayton', 'Detroit', 'Fayetteville, NC', 'Huntington', 'Hampton', 'Indianapolis', 'Lebanon', 'Martinsburg', 'Memphis', 'Mountain Home', 'North Florida/South Georgia', 'Northern Indiana', 'New Jersey', 'Northport', 'NYN-New York Harbor', 'BYN-New York Harbor', 'Orlando', 'Richmond', 'Salisbury', 'San Juan', 'Togus', 'ALN-Upstate New York', 'BUF-Upstate New York', 'SYR-Upstate New York', 'Washington DC', 'White River Junction', 'Wilkes-Barre', 'Wilmington'], 
+            2: ['Albuquerque', 'Amarillo', 'Boise', 'Cheyenne', 'Columbia, MO', 'Denver', 'Des Moines', 'Fargo', 'Fayetteville, AR', 'Fresno', 'Fort Harrison', 'Grand Junction', 'Houston', 'Iowa City', 'Jackson', 'Kansas City', 'Las Vegas', 'Leavenworth', 'Little Rock', 'Loma Linda', 'Marion', 'Minneapolis', 'Muskogee', 'Nellis AFB DOD', 'New Orleans', 'Oklahoma City', 'Omaha', 'Palo Alto', 'Phoenix', 'Reno', 'Sacramento', 'Shreveport', 'Sioux Falls', 'Spokane', 'St. Louis', 'Temple (Central Texas)', 'Topeka', 'Tucson', 'West Los Angeles', 'Wichita']},
+        3: {1: ['Ann Arbor', 'Asheville', 'Augusta', 'Bay Pines', 'Beckley', 'Bronx', 'Cincinnati', 'Clarksburg', 'Cleveland', 'Columbia, SC', 'Connecticut', 'Dayton', 'Detroit', 'Fayetteville, NC', 'Huntington','Hampton', 'Lebanon', 'Memphis', 'Northern Indiana', 'Northport', 'NYN-New York Harbor','BYN-New York Harbor', 'Salisbury', 'ALN-Upstate New York', 'BUF-Upstate New York', 'SYR-Upstate New York', 'White River Junction', 'Wilkes-Barre', 'Wilmington'], 
+            2: ['Albuquerque', 'Biloxi', 'Fort Harrison', 'Grand Junction', 'Houston', 'Iowa City', 'Jackson', 'Kansas City', 'Las Vegas', 'Leavenworth', 'Little Rock', 'Marion', 'Muskogee', 'Nellis AFB DOD', 'Oklahoma City', 'Palo Alto', 'Reno', 'San Juan', 'Sacramento', 'Shreveport', 'Sioux Falls', 'Spokane', 'St. Louis', 'Temple (Central Texas)', 'Topeka', 'Tucson', 'West Los Angeles', 'Wichita'], 
+            3: ['Atlanta', 'Baltimore', 'Birmingham', 'Central Alabama', 'Indianapolis', 'Martinsburg', 'Mountain Home', 'North Florida/South Georgia', 'New Jersey', 'Orlando', 'Richmond', 'Togus', 'Washington DC', 'Amarillo', 'Black Hills', 'Boise', 'Cheyenne', 'Columbia, MO', 'Denver', 'Des Moines', 'Fargo', 'Fayetteville, AR', 'Fresno', 'Loma Linda', 'Minneapolis', 'New Orleans', 'Omaha', 'Phoenix']},
+        4: {1: ['Ann Arbor', 'Asheville', 'Augusta', 'Bay Pines', 'Beckley', 'Bronx', 'Cincinnati', 'Clarksburg', 'Columbia, SC', 'Connecticut', 'Dayton', 'Detroit', 'Huntington','Hampton', 'Lebanon', 'Northern Indiana', 'NYN-New York Harbor','BYN-New York Harbor', 'Salisbury', 'ALN-Upstate New York', 'BUF-Upstate New York', 'SYR-Upstate New York','White River Junction', 'Wilmington', 'Wilkes-Barre'], 
+            2: ['Albuquerque', 'Amarillo', 'Cheyenne', 'Denver', 'Grand Junction', 'Houston', 'Iowa City', 'Marion', 'Muskogee', 'Nellis AFB DOD', 'Oklahoma City', 'Palo Alto', 'San Juan', 'Reno', 'Spokane', 'St. Louis', 'Topeka', 'Tucson', 'Wichita'], 
+            3: ['Atlanta', 'Baltimore', 'Birmingham', 'Central Alabama', 'Fayetteville, NC', 'Indianapolis', 'Martinsburg', 'Memphis', 'Mountain Home', 'North Florida/South Georgia', 'New Jersey', 'Northport', 'Orlando', 'Richmond', 'Togus', 'Washington DC', 'Black Hills', 'Loma Linda'], 
+            4: ['Biloxi', 'Boise', 'Columbia, MO', 'Des Moines', 'Fargo', 'Fayetteville, AR', 'Fresno', 'Fort Harrison', 'Jackson', 'Kansas City', 'Las Vegas', 'Leavenworth', 'Little Rock', 'Minneapolis', 'New Orleans', 'Omaha', 'Phoenix', 'Sacramento', 'Shreveport', 'Sioux Falls', 'Temple (Central Texas)', 'West Los Angeles', 'Cleveland']},
+        5: {1: ['Ann Arbor', 'Augusta', 'Asheville', 'Bay Pines', 'Bronx', 'Clarksburg', 'Connecticut', 'Detroit', 'Huntington','Hampton', 'Northern Indiana', 'Lebanon', 'NYN-New York Harbor','BYN-New York Harbor', 'ALN-Upstate New York', 'BUF-Upstate New York', 'SYR-Upstate New York', 'White River Junction', 'Wilmington'], 
+            2: ['Albuquerque', 'Amarillo', 'Cheyenne', 'Denver', 'Grand Junction', 'Houston', 'Muskogee', 'Nellis AFB DOD', 'Oklahoma City', 'Palo Alto', 'Reno', 'Spokane', 'St. Louis', 'Topeka', 'Tucson', 'Wichita'], 
+            3: ['Atlanta', 'Baltimore', 'Birmingham', 'Central Alabama', 'Fayetteville, NC', 'Indianapolis', 'Martinsburg', 'Mountain Home', 'North Florida/South Georgia', 'New Jersey', 'Richmond', 'Togus', 'Washington DC', 'Loma Linda'], 
+            4: ['Biloxi', 'Boise', 'Columbia, MO', 'Des Moines',
