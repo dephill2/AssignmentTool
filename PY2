@@ -1,0 +1,38 @@
+import pandas as pd
+df_sites = xl("SiteTable[#All]", headers=True)
+df_inputs = xl("InputTable[#All]", headers=True)
+num_rns = int(df_inputs.loc[df_inputs['Variable'] == 'Num_RNs', 'Value'].iloc[0])
+num_teams = int(df_inputs.loc[df_inputs['Variable'] == 'Num_Providers', 'Value'].iloc[0])
+max_census = 55
+max_sites = 7
+df_sites['TotalCensus'] = pd.to_numeric(df_sites['TotalCensus'], errors='coerce').fillna(0)
+df_sites['ProcessingCode'] = df_sites['SiteCode'].apply(lambda x: 'SPO_DOD' if x in ['SPO', 'DOD'] else x)
+df_sites = df_sites.sort_values(by='TotalCensus', ascending=False).reset_index(drop=True)
+rns = []
+for i in range(num_rns):
+    rns.append({'id': f"RN {i+1}", 'census': 0, 'site_count': 0, 'assignments': [], 'has_fav': False})
+unassigned = []
+fav_sites = ['FAV', 'FNC']
+for _, row in df_sites.iterrows():
+    site_name = row['facilityName']
+    census = row['TotalCensus']
+    code = row['SiteCode']
+    assigned = False
+    rns.sort(key=lambda x: (x['census'], x['site_count']))
+    for rn in rns:
+        if (rn['census'] + census <= max_census) and (rn['site_count'] + 1 <= max_sites):
+            is_fav = code in fav_sites
+            if is_fav and rn['has_fav']: continue
+            rn['assignments'].append(f"{site_name} ({int(census)})")
+            rn['census'] += census
+            rn['site_count'] += 1
+            if is_fav: rn['has_fav'] = True
+            assigned = True
+            break
+    if not assigned: unassigned.append(f"{site_name} ({int(census)})")
+output_rows = []
+for rn in sorted(rns, key=lambda x: x['id']):
+    output_rows.append([rn['id'], int(rn['census']), ", ".join(rn['assignments'])])
+if unassigned: output_rows.append(["UNASSIGNED", 0, ", ".join(unassigned)])
+df_result = pd.DataFrame(output_rows, columns=["RN Name", "Total Census", "Assigned Sites"])
+df_result
