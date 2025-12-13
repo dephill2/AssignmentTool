@@ -1,0 +1,46 @@
+import pandas as pd
+
+# Default output
+output_df = pd.DataFrame(["No Data"])
+
+try:
+    # 1. SETUP
+    df_sites = xl("SiteTable[#All]", headers=True)
+    df_inputs = xl("InputTable[#All]", headers=True)
+    num_teams = int(df_inputs.loc[df_inputs['Variable'] == 'Num_Providers', 'Value'].iloc[0])
+    
+    # 2. PROVIDER MAPPING (Same logic as before)
+    team_4 = {
+        1: ['Ann Arbor', 'Asheville', 'Augusta', 'Bay Pines', 'Beckley', 'Bronx', 'Cincinnati', 'Clarksburg', 'Columbia, SC', 'Connecticut', 'Dayton', 'Detroit', 'Huntington','Hampton', 'Lebanon', 'Northern Indiana', 'NYN-New York Harbor','BYN-New York Harbor', 'Salisbury', 'ALN-Upstate New York', 'BUF-Upstate New York', 'SYR-Upstate New York','White River Junction', 'Wilmington', 'Wilkes-Barre'],
+        2: ['Albuquerque', 'Amarillo', 'Cheyenne', 'Denver', 'Grand Junction', 'Houston', 'Iowa City', 'Marion', 'Muskogee', 'Nellis AFB DOD', 'Oklahoma City', 'Palo Alto', 'San Juan', 'Reno', 'Spokane', 'St. Louis', 'Topeka', 'Tucson', 'Wichita'],
+        3: ['Atlanta', 'Baltimore', 'Birmingham', 'Central Alabama', 'Fayetteville, NC', 'Indianapolis', 'Martinsburg', 'Memphis', 'Mountain Home', 'North Florida/South Georgia', 'New Jersey', 'Northport', 'Orlando', 'Richmond', 'Togus', 'Washington DC', 'Black Hills', 'Loma Linda'],
+        4: ['Biloxi', 'Boise', 'Columbia, MO', 'Des Moines', 'Fargo', 'Fayetteville, AR', 'Fresno', 'Fort Harrison', 'Jackson', 'Kansas City', 'Las Vegas', 'Leavenworth', 'Little Rock', 'Minneapolis', 'New Orleans', 'Omaha', 'Phoenix', 'Sacramento', 'Shreveport', 'Sioux Falls', 'Temple (Central Texas)', 'West Los Angeles', 'Cleveland']
+    }
+    
+    # 3. CALCULATE TOTALS
+    summary_rows = []
+    
+    # Ensure 'TotalCensus' is numeric
+    df_sites['TotalCensus'] = pd.to_numeric(df_sites['TotalCensus'], errors='coerce').fillna(0)
+
+    if num_teams == 4:
+        for team_id, sites in team_4.items():
+            # Filter for just this team's sites
+            team_data = df_sites[df_sites['facilityName'].isin(sites)]
+            
+            # Sum it up
+            total_census = team_data['TotalCensus'].sum()
+            site_count = len(team_data)
+            
+            summary_rows.append([f"Team {team_id}", int(total_census), site_count])
+            
+    # 4. OUTPUT
+    df_out = pd.DataFrame(summary_rows, columns=["Provider Team", "Total Patients", "Total Sites"])
+    
+    # Remove index numbers for a clean look
+    output_df = df_out.reset_index(drop=True)
+
+except Exception as e:
+    output_df = pd.DataFrame([f"Error: {str(e)}"])
+
+output_df
