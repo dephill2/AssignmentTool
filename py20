@@ -1,0 +1,43 @@
+import pandas as pd
+
+output_df = pd.DataFrame(["No Data"])
+
+try:
+    # 1. SETUP
+    df_sites = xl("SiteTable[#All]", headers=True)
+    df_inputs = xl("InputTable[#All]", headers=True)
+    num_rns = int(df_inputs.loc[df_inputs['Variable'] == 'Num_RNs', 'Value'].iloc[0])
+
+    # 2. CLEAN & SORT
+    df_sites = df_sites[df_sites['facilityName'].str.lower() != 'total']
+    df_sites['TotalCensus'] = pd.to_numeric(df_sites['TotalCensus'], errors='coerce').fillna(0)
+    df_sites = df_sites.sort_values('TotalCensus', ascending=False)
+
+    # 3. RUN LOGIC
+    rns = [{'id': f"RN {i+1}", 'census': 0, 'count': 0} for i in range(num_rns)]
+
+    for _, row in df_sites.iterrows():
+        cen = row['TotalCensus']
+        rns.sort(key=lambda x: x['census']) # Sort by emptiest
+        for rn in rns:
+            if (rn['census'] + cen <= 55) and (rn['count'] < 7):
+                rn['census'] += cen
+                rn['count'] += 1
+                break
+
+    # 4. BUILD SUMMARY TABLE
+    summary_list = []
+    for rn in rns:
+        summary_list.append([rn['id'], int(rn['census'])])
+
+    # Create DataFrame
+    df_sum = pd.DataFrame(summary_list, columns=["RN Number", "Total Patients"])
+    
+    # Sort correctly (RN 1, RN 2, RN 3... instead of RN 1, RN 10, RN 2)
+    df_sum['SortKey'] = df_sum['RN Number'].apply(lambda x: int(x.split(' ')[1]))
+    output_df = df_sum.sort_values('SortKey').drop(columns=['SortKey']).reset_index(drop=True)
+
+except Exception as e:
+    output_df = pd.DataFrame([f"Error: {str(e)}"])
+
+output_df
