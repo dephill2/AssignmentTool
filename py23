@@ -1,0 +1,44 @@
+import pandas as pd
+
+output_df = pd.DataFrame(["No Data"])
+
+try:
+    # 1. SETUP
+    df_sites = xl("SiteTable[#All]", headers=True)
+    df_inputs = xl("InputTable[#All]", headers=True)
+    num_teams = int(df_inputs.loc[df_inputs['Variable'] == 'Num_Providers', 'Value'].iloc[0])
+    df_sites['TotalCensus'] = pd.to_numeric(df_sites['TotalCensus'], errors='coerce').fillna(0)
+    
+    # 2. MAPPING
+    team_4 = {
+        1: ['Ann Arbor', 'Asheville', 'Augusta', 'Bay Pines', 'Beckley', 'Bronx', 'Cincinnati', 'Clarksburg', 'Columbia, SC', 'Connecticut', 'Dayton', 'Detroit', 'Huntington','Hampton', 'Lebanon', 'Northern Indiana', 'NYN-New York Harbor','BYN-New York Harbor', 'Salisbury', 'ALN-Upstate New York', 'BUF-Upstate New York', 'SYR-Upstate New York','White River Junction', 'Wilmington', 'Wilkes-Barre'],
+        2: ['Albuquerque', 'Amarillo', 'Cheyenne', 'Denver', 'Grand Junction', 'Houston', 'Iowa City', 'Marion', 'Muskogee', 'Nellis AFB DOD', 'Oklahoma City', 'Palo Alto', 'San Juan', 'Reno', 'Spokane', 'St. Louis', 'Topeka', 'Tucson', 'Wichita'],
+        3: ['Atlanta', 'Baltimore', 'Birmingham', 'Central Alabama', 'Fayetteville, NC', 'Indianapolis', 'Martinsburg', 'Memphis', 'Mountain Home', 'North Florida/South Georgia', 'New Jersey', 'Northport', 'Orlando', 'Richmond', 'Togus', 'Washington DC', 'Black Hills', 'Loma Linda'],
+        4: ['Biloxi', 'Boise', 'Columbia, MO', 'Des Moines', 'Fargo', 'Fayetteville, AR', 'Fresno', 'Fort Harrison', 'Jackson', 'Kansas City', 'Las Vegas', 'Leavenworth', 'Little Rock', 'Minneapolis', 'New Orleans', 'Omaha', 'Phoenix', 'Sacramento', 'Shreveport', 'Sioux Falls', 'Temple (Central Texas)', 'West Los Angeles', 'Cleveland']
+    }
+    
+    # 3. BUILD MATRIX DATA
+    raw_data = []
+    if num_teams == 4:
+        for team, sites in team_4.items():
+            team_data = df_sites[df_sites['facilityName'].isin(sites)]
+            for _, r in team_data.iterrows():
+                # We prefix with "Cat" so columns sort nicely (Cat 1, Cat 2...)
+                raw_data.append({
+                    "Team": f"Team {team}",
+                    "Category": f"Cat {int(r['Categories'])}",
+                    "Census": r['TotalCensus']
+                })
+    
+    if raw_data:
+        df_raw = pd.DataFrame(raw_data)
+        # Create Pivot Table: Rows=Team, Cols=Category, Values=Sum of Census
+        pivot_df = df_raw.pivot_table(index='Team', columns='Category', values='Census', aggfunc='sum', fill_value=0)
+        output_df = pivot_df
+    else:
+        output_df = pd.DataFrame(["No Data Found"])
+
+except Exception as e:
+    output_df = pd.DataFrame([f"Error: {str(e)}"])
+
+output_df
