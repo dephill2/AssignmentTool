@@ -1,0 +1,756 @@
+import pandas as pd
+import dash
+import io
+import dash_bootstrap_components as dbc
+import pytz
+from dash import dcc, html, Input, Output, State
+from ortools.linear_solver import pywraplp
+from datetime import datetime, timezone
+
+
+
+data = {
+    'SiteCode': [
+        'ABQ', 'ALN', 'AMA', 'ANN', 'ASH', 'ATG', 'AUG', 'BAL', 'BAY', 'BEC',
+        'BHH', 'BIL', 'BIR', 'BOI', 'BRX', 'BUF', 'BYN', 'CAV', 'CHY', 'CIN',
+        'CLA', 'CLE', 'CMO', 'CMS', 'CON', 'CTX', 'DAY', 'DEN', 'DES', 'DET',
+        'DOD', 'FAR', 'FAV', 'FHM', 'FNC', 'FRE', 'GLA', 'GRJ', 'HAM', 'HOU',
+        'HUN', 'IND', 'IOW', 'JAC', 'KAN', 'LAS', 'LEA', 'LEB', 'LIT', 'LKC',
+        'LOM', 'MAC', 'MAR', 'MEM', 'MIN', 'MOU', 'MUS', 'MWV', 'NIN', 'NJH',
+        'NOL', 'NOP', 'NYN', 'OKL', 'OMA', 'ORL', 'PAL', 'PHO', 'REN', 'RIC',
+        'SAN', 'SBY', 'SHR', 'SPO', 'STL', 'SUX', 'SYR', 'TOG', 'TOP', 'TUC',
+        'WAS', 'WBP', 'WIC', 'WIM', 'WRJ'
+    ],
+    #5,11,17,22,26,32,36,41,47,51,57,62,67,74,79,84,85
+
+    'facilityName': [
+        'Albuquerque', 'ALN-Upstate New York', 'Amarillo', 'Ann Arbor', 'Asheville',
+        'Atlanta', 'Augusta', 'Baltimore', 'Bay Pines', 'Beckley', 'Black Hills',
+        'Biloxi', 'Birmingham', 'Boise', 'Bronx', 'BUF-Upstate New York', 'BYN-New York Harbor',
+        'Central Alabama', 'Cheyenne', 'Cincinnati', 'Clarksburg', 'Cleveland',
+        'Columbia, MO', 'Columbia, SC', 'Connecticut', 'Temple (Central Texas)',
+        'Dayton', 'Denver', 'Des Moines', 'Detroit', 'Nellis AFB DOD', 'Fargo',
+        'Fayetteville, AR', 'Fort Harrison', 'Fayetteville, NC', 'Fresno',
+        'West Los Angeles', 'Grand Junction', 'Hampton', 'Houston', 'Huntington',
+        'Indianapolis', 'Iowa City', 'Jackson', 'Kansas City', 'Las Vegas', 'Leavenworth',
+        'Lebanon', 'Little Rock', 'North Florida/South Georgia', 'Loma Linda',
+        'Sacramento', 'Marion', 'Memphis', 'Minneapolis', 'Mountain Home', 'Muskogee',
+        'Martinsburg', 'Northern Indiana', 'New Jersey', 'New Orleans', 'Northport',
+        'NYN-New York Harbor', 'Oklahoma City', 'Omaha', 'Orlando', 'Palo Alto',
+        'Phoenix', 'Reno', 'Richmond', 'San Juan', 'Salisbury', 'Shreveport', 'Spokane',
+        'St. Louis', 'Sioux Falls', 'SYR-Upstate New York', 'Togus', 'Topeka',
+        'Tucson', 'Washington DC', 'Wilkes-Barre', 'Wichita', 'Wilmington',
+        'White River Junction'
+    ],
+     'Date': ['12/16/2025 at 4:30am CST/5:30am EST'] * 85,
+   # 'Date': ['12/15/2025 at 4:00pm CST/5:00pm EST'] * 85,
+    'TotalCensus': [
+                  5,2,9,11,9,8,4,13,15,3,1,4,15,5,9,11,6,2,4,7,11,17,8,5,6,1,6,6,4,8,1,0,4,2,2,12,29,2,0,27,2,9,7,2,15,11,4,6,27,7,17,8,3,10,8,12,4,3,0,4,5,5,15,13,7,8,18,8,9,12,27,3,2,2,6,1,2,4,0,8,10,12,9,2,1
+
+                  ],
+#                 3, 4, 5, 8, 7, 15, 8, 22, 11, 1, 1, 2, 11, 5, 14, 3, 5, 0, 2, 11, 10, 15, 8, 5, 8, 1, 5, 5, 9, 7, 4, 0, 5, 0, 1, 12, 34, 1, 1, 24, 1, 9, 7, 3, 10, 3, 2, 6, 27, 2, 12, 8, 0, 13, 8, 14, 1, 4, 0, 4, 7, 4, 10, 20, 6, 12, 14, 14, 4, 15, 28, 4, 1, 2, 7, 2, 6, 3, 1, 18, 8, 8, 7, 4, 0],
+    'Categories': [
+        3, 3, 3, 3, 3, 3, 3, 3, 3, 1,
+        1, 2, 3, 3, 4, 3, 3, 1, 1, 3,
+        2, 3, 3, 4, 3, 3, 3, 3, 1, 4,
+        3, 1, 1, 1, 3, 3, 3, 2, 1, 3,
+        3, 3, 3, 3, 3, 3, 1, 3, 3, 1,
+        3, 3, 1, 3, 3, 3, 1, 4, 3, 3,
+        3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+        3, 3, 3, 1, 3, 1, 3, 3, 1, 3,
+        3, 3, 3, 1, 3
+    ]
+}
+
+site_data = pd.DataFrame(data)
+
+aprn_sites = ['ASH', 'BEC', 'BHH', 'CAV', 'CHY', 'FAR', 'FAV', 'FHM', 'LEA', 'LEB', 'LKC', 'MAR', 'MUS', 'SUX', 'TOP', 'WIM', 'BIL', 'CLA', 'CTX', 'GRJ', 'MOU', 'WIC', 'BRX', 'CMS', 'DET', 'MWV', 'TOG', 'SBY']
+
+site_data_copy = site_data.copy()
+site_data_copy['OriginalSiteCode'] = site_data_copy['SiteCode']
+site_data_copy['SiteCode'] = site_data_copy['SiteCode'].apply(lambda x: 'SPO_DOD' if x in ['SPO', 'DOD'] else x)
+site_data_grouped = site_data_copy.groupby('SiteCode').agg({
+    'TotalCensus': 'sum',
+    'facilityName': lambda x: list(x),
+    'OriginalSiteCode': lambda x: list(x)
+}).reset_index()
+
+historical_assignments = {
+    (16, 4): {
+        'ABQ': 11, 'ALN': 15, 'AMA': 5, 'ANN': 8, 'ASH': 13, 'ATG': 8, 'AUG': 2,
+        'BAL': 3, 'BAY': 4, 'BEC': 11, 'BHH': 13, 'BIL': 15, 'BIR': 9, 'BOI': 7,
+        'BRX': 15, 'BUF': 2, 'BYN': 6, 'CAV': 4, 'CHY': 14, 'CIN': 10, 'CLA': 7,
+        'CLE': 12, 'CMO': 10, 'CMS': 6, 'CON': 12, 'CTX': 13, 'DAY': 7, 'DEN': 8,
+        'DES': 3, 'DET': 10, 'DOD': 3, 'FAR': 1, 'FAV': 14, 'FHM': 13, 'FNC': 1,
+        'FRE': 9, 'GLA': 0, 'GRJ': 5, 'HAM': 15, 'HOU': 5, 'HUN': 2, 'IND': 14, 'IOW': 9,
+        'JAC': 7, 'KAN': 11, 'LAS': 1, 'LEA': 13, 'LEB': 14, 'LIT': 7, 'LKC': 5,
+        'LOM': 4, 'MAC': 2, 'MAR': 5, 'MEM': 11, 'MIN': 6, 'MOU': 15, 'MUS': 13,
+        'MWV': 6, 'NIN': 4, 'NJH': 10, 'NOL': 3, 'NOP': 12, 'NYN': 6, 'OKL': 13,
+        'OMA': 6, 'ORL': 11, 'PAL': 1, 'PHO': 9, 'REN': 8, 'RIC': 2, 'SAN': 4,
+        'SBY': 12, 'SHR': 0, 'SPO': 3, 'STL': 7, 'SUX': 13, 'SYR': 1, 'TOG': 10,
+        'TOP': 13, 'TUC': 13, 'WAS': 6, 'WBP': 6, 'WIC': 9, 'WIM': 13, 'WRJ': 12
+    }
+}
+
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions=True)
+
+app.layout = dbc.Container([
+    html.H1('Automated Assignment Tool (NTAAT)'),
+
+    # 🔽 Export to Excel Button + Download Component
+    html.Div([
+        dbc.Button("📊 Export to Excel", id="export-btn", color="success", className="mb-3"),
+        dcc.Download(id="download-dataframe-xlsx")
+    ]),
+
+    # Store to hold RN/MD assignments
+    dcc.Store(id='rn-assignments', data={}),
+    dcc.Store(id='provider-assignments', data={}),
+    dcc.Store(id='current-providers', data=4),
+
+    dbc.Row([
+
+        dbc.Col([
+            dbc.Card(dbc.CardBody([
+                html.H4('RN Distribution'),
+                html.P(f"Active Census Date: {site_data['Date'].iloc[0]}, "
+                       f"Total Active Census: {site_data['TotalCensus'].sum()}"),
+                dbc.Row([
+                    dbc.Col([
+                        html.Label('Number of RNs:'),
+                        dcc.Dropdown(
+                            id='num-rns',
+                            options=[{'label': i, 'value': i} for i in range(12, 23)],
+                            value=16,
+                            clearable=False
+                        ),
+                    ], md=6),
+                    dbc.Col([
+                        html.Label('APRN:'),
+                        dcc.Dropdown(
+                            id='aprn',
+                            options=[{'label': 'No', 'value': 0}, {'label': 'Yes', 'value': 1}],
+                            value=0,
+                            clearable=False
+                        ),
+                    ], md=6),
+                ]),
+                html.Div(id='rn-distribution')
+            ]))
+        ], md=4),
+
+
+        dbc.Col([
+            dbc.Card(dbc.CardBody([
+                html.H4('Cross-Walk Reference'),
+                html.Div(id='cross-walk-reference')
+            ]))
+        ], md=4),
+
+
+        dbc.Col([
+            dbc.Card(dbc.CardBody([
+                html.H4('Provider Team Detail'),
+                html.Label('Number of Providers / Teams:'),
+                dcc.Dropdown(
+                    id='num-providers',
+                    options=[{'label': i, 'value': i} for i in range(2, 9)],
+                    value=4,
+                    clearable=False
+                ),
+                html.Div(id='provider-team-detail')
+            ]))
+        ], md=4),
+    ])
+], fluid=True)
+
+# ---------------------------
+# RN Distribution Callback
+# ---------------------------
+@app.callback(
+    Output('rn-distribution', 'children'),
+    Output('rn-assignments', 'data'),
+    [Input('num-rns', 'value'),
+     Input('aprn', 'value')]
+)
+def update_rn_distribution(num_rns, aprn):
+    site_data_to_use = site_data_grouped.copy()
+    non_aprn_sites = site_data_to_use.reset_index(drop=True)
+
+    solver = pywraplp.Solver.CreateSolver('SCIP')
+    NUM_RNS = int(num_rns)
+    MAX_PATIENTS_PER_RN = 55
+
+    assign = {}
+    penalty = {}
+
+    base_num_rns = 16
+    base_num_doctors = 4
+    base_assignment = historical_assignments.get((base_num_rns, base_num_doctors))
+
+    for i in range(len(non_aprn_sites)):
+        for rn in range(NUM_RNS):
+            assign[(i, rn)] = solver.IntVar(0, 1, f'site_{i}_to_rn_{rn}')
+            if non_aprn_sites.iloc[i]['OriginalSiteCode'][0] in base_assignment:
+                base_rn = base_assignment[non_aprn_sites.iloc[i]['OriginalSiteCode'][0]]
+                base_rn_index = base_rn % base_num_rns
+                new_rn_index = base_rn_index % NUM_RNS
+                if rn == new_rn_index:
+                    penalty[(i, rn)] = solver.IntVar(0, 0, f'penalty_{i}_{rn}')
+                else:
+                    penalty[(i, rn)] = solver.IntVar(0, 1, f'penalty_{i}_{rn}')
+                    solver.Add(penalty[(i, rn)] >= assign[(i, rn)])
+                    solver.Add(penalty[(i, rn)] >= -assign[(i, rn)])
+                    if (i, new_rn_index) in assign:
+                        solver.Add(penalty[(i, rn)] <= 1 - assign[(i, new_rn_index)])
+            else:
+                penalty[(i, rn)] = solver.IntVar(0, 1, f'penalty_{i}_{rn}')
+                solver.Add(penalty[(i, rn)] >= assign[(i, rn)])
+                solver.Add(penalty[(i, rn)] >= - assign[(i, rn)])
+                if (i, rn) in assign:
+                    solver.Add(penalty[(i, rn)] <= 1 - assign[(i, rn)])
+
+    for i in range(len(non_aprn_sites)):
+        solver.Add(sum(assign[(i, n)] for n in range(NUM_RNS)) == 1)
+
+    for n in range(NUM_RNS):
+        total_patients = sum(assign[(i, n)] * non_aprn_sites.iloc[i]['TotalCensus'] for i in range(len(non_aprn_sites)))
+        solver.Add(total_patients <= MAX_PATIENTS_PER_RN)
+        total_sites = sum(assign[(i, n)] for i in range(len(non_aprn_sites)))
+        solver.Add(total_sites <= 7)
+
+    avg_patients = sum(non_aprn_sites['TotalCensus']) / NUM_RNS
+    patient_diff = {}
+    for n in range(NUM_RNS):
+        patient_diff[n] = solver.NumVar(0, solver.infinity(), f'patient_diff_{n}')
+        total_patients = sum(assign[(i, n)] * non_aprn_sites.iloc[i]['TotalCensus'] for i in range(len(non_aprn_sites)))
+        solver.Add(patient_diff[n] >= total_patients - avg_patients)
+        solver.Add(patient_diff[n] >= avg_patients - total_patients)
+
+    site_diff = {}
+    for n in range(NUM_RNS):
+        site_diff[n] = solver.NumVar(0, solver.infinity(), f'site_diff_{n}')
+        total_sites = sum(assign[(i, n)] for i in range(len(non_aprn_sites)))
+        avg_sites = len(non_aprn_sites) / NUM_RNS
+        solver.Add(site_diff[n] >= total_sites - avg_sites)
+        solver.Add(site_diff[n] >= avg_sites - total_sites)
+
+    # Constraints to separate Fayetteville and Columbia sites
+    fayetteville_sites = ['FAV', 'FNC']
+    columbia_sites = ['CMO', 'CMS']
+    nellis_spokane_sites = ['SPO', 'DOD']
+
+    for rn in range(NUM_RNS):
+        fayetteville_vars = [assign[(i, rn)] for i in range(len(non_aprn_sites)) if non_aprn_sites.iloc[i]['OriginalSiteCode'][0] in fayetteville_sites]
+        columbia_vars = [assign[(i, rn)] for i in range(len(non_aprn_sites)) if non_aprn_sites.iloc[i]['OriginalSiteCode'][0] in columbia_sites]
+        nellis_spokane_vars = [assign[(i, rn)] for i in range(len(non_aprn_sites)) if non_aprn_sites.iloc[i]['OriginalSiteCode'][0] in nellis_spokane_sites]
+
+        solver.Add(sum(fayetteville_vars) <= 1)
+        solver.Add(sum(columbia_vars) <= 1)
+        solver.Add(sum(nellis_spokane_vars) <= 1)
+
+    solver.Minimize(sum(patient_diff[n] for n in range(NUM_RNS)) +
+                    sum(site_diff[n] for n in range(NUM_RNS)) +
+                    10 * sum(penalty[(i, n)] for i in range(len(non_aprn_sites)) for n in range(NUM_RNS)))
+
+    status = solver.Solve()
+
+    rn_assignments = {n: {'Sites': [], 'facilityNames': [], 'OriginalSites': [], 'Patients': 0} for n in range(NUM_RNS)}
+    if status == pywraplp.Solver.OPTIMAL:
+        for i in range(len(non_aprn_sites)):
+            for n in range(NUM_RNS):
+                if assign[(i, n)].solution_value() > 0.5:
+                    rn_assignments[n]['Sites'].append(non_aprn_sites.iloc[i]['SiteCode'])
+
+                    rn_assignments[n]['facilityNames'].extend(non_aprn_sites.iloc[i]['facilityName'])
+                    rn_assignments[n]['OriginalSites'].append(non_aprn_sites.iloc[i]['OriginalSiteCode'][0])
+                    rn_assignments[n]['Patients'] += non_aprn_sites.iloc[i]['TotalCensus']
+
+    output = []
+    rn_cards = []
+    site_patients = site_data_copy.groupby('OriginalSiteCode')['TotalCensus'].sum().to_dict()
+    facility_patients = site_data_copy.groupby('facilityName')['TotalCensus'].sum().to_dict()
+    for rn in range(NUM_RNS):
+        sites = rn_assignments[rn]['Sites']
+        original_sites = rn_assignments[rn]['OriginalSites']
+        facility_names = rn_assignments[rn]['facilityNames']
+        site_str = []
+        for facility in sorted(set(facility_names)):
+            if facility in ['Nellis AFB', 'SPO'] and 'SPO_DOD' in sites:
+                site_str.append(html.P(f"Nellis AFB, SPO ({site_patients.get('DOD', 0) + site_patients.get('SPO', 0)})"))
+            elif aprn == 1 and facility in [site_data_copy.loc[site_data_copy['OriginalSiteCode'] == code, 'facilityName'].iloc[0] for code in aprn_sites if code in original_sites]:
+                site_str.append(html.P(f"{facility} ({facility_patients.get(facility, 0)})", style={'color': 'blue'}))
+            else:
+                site_str.append(html.P(f"{facility} ({facility_patients.get(facility, 0)})"))
+
+        rn_card = dbc.Col(
+            dbc.Card(
+                dbc.CardBody([
+                    html.H5(f"RN {rn + 1}", style={"font-weight": "bold"}),
+                    html.P(f"Patients: {rn_assignments[rn]['Patients']}"),
+                    html.Div(site_str),
+                ]),
+                style={"background-color": "#f7f7f7", "border": "1px solid #ddd", "border-radius": "10px", "box-shadow": "0px 0px 10px rgba(0,0,0,0.1)", "height": "100%"}
+            ),
+            md=4
+        )
+        rn_cards.append(rn_card)
+        if (rn + 1) % 3 == 0 or rn == NUM_RNS - 1:
+            output.append(dbc.Row(rn_cards))
+            rn_cards = []
+
+    assignments_output = {
+        k+1: {
+            f: sum(site_data_copy.loc[site_data_copy['facilityName'] == f, 'TotalCensus'])
+            for f in set(rn_assignments[k]['facilityNames'])
+        }
+        for k in rn_assignments
+    }
+
+    return dbc.Container(output, fluid=True, style={"padding": "20px"}), assignments_output
+
+# ---------------------------
+# Provider Team Detail Callback (Tabs)
+# ---------------------------
+@app.callback(
+    Output('provider-team-detail', 'children'),
+    Output('provider-assignments', 'data'),
+    Input('num-providers', 'value'),
+    State('provider-assignments', 'data'),
+)
+def update_provider_team_detail(num_providers, stored_provider_assignments):
+    if num_providers is None:
+        return html.P("No provider team data available."), dash.no_update
+
+    num_providers = int(num_providers)
+    # --- Define the get_census helper function ---
+    def get_census(site_name):
+        row = site_data_copy[site_data_copy['facilityName'] == site_name]
+        return int(row['TotalCensus'].iloc[0]) if not row.empty else 0
+
+    # --- Mapping site groups to facility names from the dataset ---
+    site_groups = {
+        2: {
+            1: ['Ann Arbor', 'Asheville', 'Atlanta', 'Augusta', 'Baltimore', 'Bay Pines',
+                'Biloxi', 'Black Hills', 'Beckley', 'Birmingham', 'Bronx', 'Central Alabama',
+                'Cincinnati', 'Clarksburg', 'Cleveland', 'Columbia, SC', 'Connecticut', 'Dayton',
+                'Detroit', 'Fayetteville, NC', 'Huntington', 'Hampton', 'Indianapolis', 'Lebanon', 'Martinsburg',
+                'Memphis', 'Mountain Home', 'North Florida/South Georgia', 'Northern Indiana',
+                'New Jersey', 'Northport', 'NYN-New York Harbor', 'BYN-New York Harbor', 'Orlando', 'Richmond', 'Salisbury',
+                'San Juan', 'Togus', 'ALN-Upstate New York', 'BUF-Upstate New York', 'SYR-Upstate New York', 'Washington DC', 'White River Junction',
+                'Wilkes-Barre', 'Wilmington'],
+            2: [
+                'Albuquerque', 'Amarillo', 'Boise', 'Cheyenne', 'Columbia, MO', 'Denver',
+                'Des Moines', 'Fargo', 'Fayetteville, AR', 'Fresno', 'Fort Harrison',
+                'Grand Junction', 'Houston', 'Iowa City', 'Jackson', 'Kansas City', 'Las Vegas',
+                'Leavenworth', 'Little Rock', 'Loma Linda', 'Marion', 'Minneapolis', 'Muskogee',
+                'Nellis AFB DOD', 'New Orleans', 'Oklahoma City', 'Omaha', 'Palo Alto',
+                'Phoenix', 'Reno', 'Sacramento', 'Shreveport', 'Sioux Falls', 'Spokane', 'St. Louis',
+                'Temple (Central Texas)', 'Topeka', 'Tucson', 'West Los Angeles', 'Wichita'],
+
+        },
+
+        3: {
+            1: ['Ann Arbor', 'Asheville', 'Augusta', 'Bay Pines', 'Beckley', 'Bronx', 'Cincinnati', 'Clarksburg',
+                'Cleveland', 'Columbia, SC', 'Connecticut', 'Dayton', 'Detroit', 'Fayetteville, NC', 'Huntington','Hampton', 'Lebanon',
+                'Memphis', 'Northern Indiana', 'Northport', 'NYN-New York Harbor','BYN-New York Harbor', 'Salisbury', 'ALN-Upstate New York', 'BUF-Upstate New York', 'SYR-Upstate New York',
+                'White River Junction', 'Wilkes-Barre', 'Wilmington'],
+            2: ['Albuquerque', 'Biloxi', 'Fort Harrison', 'Grand Junction', 'Houston', 'Iowa City', 'Jackson',
+                'Kansas City', 'Las Vegas', 'Leavenworth', 'Little Rock', 'Marion', 'Muskogee', 'Nellis AFB DOD',
+                'Oklahoma City', 'Palo Alto', 'Reno', 'San Juan', 'Sacramento', 'Shreveport', 'Sioux Falls', 'Spokane',
+                'St. Louis', 'Temple (Central Texas)', 'Topeka', 'Tucson', 'West Los Angeles', 'Wichita'],
+            3: ['Atlanta', 'Baltimore', 'Birmingham', 'Central Alabama', 'Indianapolis', 'Martinsburg', 'Mountain Home',
+                'North Florida/South Georgia', 'New Jersey', 'Orlando', 'Richmond', 'Togus', 'Washington DC', 'Amarillo',
+                'Black Hills', 'Boise', 'Cheyenne', 'Columbia, MO', 'Denver', 'Des Moines', 'Fargo', 'Fayetteville, AR',
+                'Fresno', 'Loma Linda', 'Minneapolis', 'New Orleans', 'Omaha', 'Phoenix']
+    },
+
+        4: {
+            1: ['Ann Arbor', 'Asheville', 'Augusta', 'Bay Pines', 'Beckley', 'Bronx', 'Cincinnati', 'Clarksburg',
+                'Columbia, SC', 'Connecticut', 'Dayton', 'Detroit', 'Huntington','Hampton', 'Lebanon', 'Northern Indiana',
+                'NYN-New York Harbor','BYN-New York Harbor', 'Salisbury', 'ALN-Upstate New York', 'BUF-Upstate New York', 'SYR-Upstate New York','White River Junction', 'Wilmington',
+                'Wilkes-Barre'],
+            2: ['Albuquerque', 'Amarillo', 'Cheyenne', 'Denver', 'Grand Junction', 'Houston', 'Iowa City', 'Marion',
+                'Muskogee', 'Nellis AFB DOD', 'Oklahoma City', 'Palo Alto', 'San Juan', 'Reno', 'Spokane', 'St. Louis',
+                'Topeka', 'Tucson', 'Wichita'],
+            3: ['Atlanta', 'Baltimore', 'Birmingham', 'Central Alabama', 'Fayetteville, NC', 'Indianapolis', 'Martinsburg',
+                'Memphis', 'Mountain Home', 'North Florida/South Georgia', 'New Jersey', 'Northport', 'Orlando', 'Richmond',
+                'Togus', 'Washington DC', 'Black Hills', 'Loma Linda'],
+            4: ['Biloxi', 'Boise', 'Columbia, MO', 'Des Moines', 'Fargo', 'Fayetteville, AR', 'Fresno', 'Fort Harrison',
+                'Jackson', 'Kansas City', 'Las Vegas', 'Leavenworth', 'Little Rock', 'Minneapolis', 'New Orleans', 'Omaha',
+                'Phoenix', 'Sacramento', 'Shreveport', 'Sioux Falls', 'Temple (Central Texas)', 'West Los Angeles', 'Cleveland']
+    },
+
+
+        5: {
+            1: ['Ann Arbor', 'Augusta', 'Asheville', 'Bay Pines', 'Bronx', 'Clarksburg', 'Connecticut', 'Detroit',
+                'Huntington','Hampton', 'Northern Indiana', 'Lebanon', 'NYN-New York Harbor','BYN-New York Harbor', 'ALN-Upstate New York', 'BUF-Upstate New York', 'SYR-Upstate New York',
+                'White River Junction', 'Wilmington'],
+            2: ['Albuquerque', 'Amarillo', 'Cheyenne', 'Denver', 'Grand Junction', 'Houston', 'Muskogee', 'Nellis AFB DOD',
+                'Oklahoma City', 'Palo Alto', 'Reno', 'Spokane', 'St. Louis', 'Topeka', 'Tucson', 'Wichita'],
+            3: ['Atlanta', 'Baltimore', 'Birmingham', 'Central Alabama', 'Fayetteville, NC', 'Indianapolis', 'Martinsburg',
+                'Mountain Home', 'North Florida/South Georgia', 'New Jersey', 'Richmond', 'Togus', 'Washington DC',
+                'Loma Linda'],
+            4: ['Biloxi', 'Boise', 'Columbia, MO', 'Des Moines', 'Fargo', 'Fayetteville, AR', 'Fresno', 'Fort Harrison',
+                'Jackson', 'Kansas City', 'Little Rock', 'New Orleans', 'Omaha', 'Phoenix', 'Sacramento', 'Shreveport',
+                'Sioux Falls', 'Temple (Central Texas)', 'Cleveland', 'West Los Angeles'],
+            5: ['Beckley', 'Cincinnati', 'Columbia, SC', 'Dayton', 'San Juan', 'Minneapolis', 'Memphis', 'Northern Indiana',
+                'Northport', 'Orlando', 'Salisbury', 'Wilkes-Barre', 'Grand Junction', 'Iowa City', 'Las Vegas',
+                'Leavenworth', 'Marion']
+    },
+
+        6: {
+            1: ['Asheville', 'Bay Pines', 'Bronx', 'Clarksburg', 'Connecticut', 'Detroit',
+                'Huntington', 'Hampton', 'Lebanon', 'NYN-New York Harbor','BYN-New York Harbor', 'ALN-Upstate New York', 'BUF-Upstate New York', 'SYR-Upstate New York',
+                'White River Junction', 'Wilmington', 'Augusta'],
+            2: ['Albuquerque', 'Amarillo', 'Cheyenne', 'Denver', 'Nellis AFB DOD', 'Oklahoma City',
+                'Palo Alto', 'Reno', 'Spokane', 'St. Louis', 'Topeka', 'Tucson', 'Wichita'],
+            3: ['Baltimore', 'Atlanta', 'Birmingham', 'Central Alabama', 'Fayetteville, NC',
+                'Martinsburg', 'Mountain Home', 'North Florida/South Georgia', 'New Jersey', 'Richmond',
+                'Togus', 'Washington DC'],
+            4: ['Biloxi', 'Boise', 'Columbia, MO', 'Des Moines', 'Fargo', 'Fresno', 'Jackson',
+                'Kansas City', 'Little Rock', 'New Orleans', 'Omaha', 'Phoenix', 'Sacramento',
+                'Shreveport', 'Sioux Falls', 'Temple (Central Texas)', 'Cleveland'],
+            5: ['Beckley', 'Cincinnati', 'Columbia, SC', 'Dayton', 'Minneapolis', 'Memphis',
+                'Northern Indiana', 'Northport', 'Salisbury', 'Wilkes-Barre', 'Grand Junction',
+                'Iowa City', 'Las Vegas', 'Leavenworth', 'Marion'],
+            6: ['Ann Arbor', 'Orlando', 'San Juan', 'Fayetteville, AR', 'Black Hills', 'Fort Harrison',
+                'Houston', 'Indianapolis', 'Muskogee', 'West Los Angeles', 'Loma Linda']
+    },
+
+
+        7: {
+            1: ['Asheville', 'Bay Pines', 'Bronx', 'Clarksburg', 'Connecticut', 'Detroit',
+                'Huntington', 'Hampton', 'Lebanon', 'ALN-Upstate New York', 'BUF-Upstate New York', 'SYR-Upstate New York', 'White River Junction',
+                'Wilmington', 'Augusta'],
+            2: ['Albuquerque', 'Amarillo', 'Cheyenne', 'Nellis AFB DOD', 'Oklahoma City',
+                'Palo Alto', 'Reno', 'Spokane', 'St. Louis', 'Topeka', 'Tucson'],
+            3: ['Atlanta', 'Birmingham', 'Central Alabama', 'Cleveland', 'Mountain Home',
+                'North Florida/South Georgia', 'New Jersey', 'Richmond', 'Washington DC',
+                'Fayetteville, NC'],
+            4: ['Biloxi', 'Boise', 'Columbia, MO', 'Des Moines', 'Kansas City', 'Little Rock',
+                'New Orleans', 'Omaha', 'Phoenix', 'Sacramento', 'Shreveport', 'Sioux Falls',
+                'Temple (Central Texas)'],
+            5: ['Beckley', 'Cincinnati', 'Columbia, SC', 'Dayton', 'Minneapolis', 'Memphis',
+                'Northern Indiana', 'Northport', 'Salisbury', 'Wilkes-Barre', 'Grand Junction',
+                'Las Vegas', 'Leavenworth', 'Marion', 'West Los Angeles'],
+            6: ['Ann Arbor', 'San Juan', 'Fayetteville, AR', 'Black Hills', 'Fort Harrison',
+                'Indianapolis', 'Togus', 'Orlando', 'Loma Linda'],
+            7: ['NYN-New York Harbor', 'BYN-New York Harbor','Martinsburg', 'Iowa City', 'Denver', 'Fargo', 'Fresno',
+                'Houston', 'Jackson', 'Wichita', 'Muskogee', 'Baltimore']
+    },
+
+        8: {
+            1: ['Asheville', 'Bay Pines', 'Bronx', 'Clarksburg', 'Connecticut', 'Detroit',
+                'Huntington', 'Hampton','Lebanon', 'ALN-Upstate New York','BUF-Upstate New York', 'SYR-Upstate New York',],
+            2: ['Albuquerque', 'Amarillo', 'Cheyenne', 'Nellis AFB DOD', 'Oklahoma City',
+                'Palo Alto', 'Reno', 'Spokane', 'St. Louis'],
+            3: ['Atlanta', 'Birmingham', 'Central Alabama', 'Cleveland', 'Mountain Home',
+                'North Florida/South Georgia', 'New Jersey', 'Richmond'],
+            4: ['Biloxi', 'Boise', 'Columbia, MO', 'Des Moines', 'Kansas City', 'Little Rock',
+                'New Orleans', 'Omaha', 'Phoenix', 'Sacramento'],
+            5: ['Beckley', 'Cincinnati', 'Columbia, SC', 'Dayton', 'Minneapolis', 'Memphis',
+                'Northern Indiana', 'Northport', 'Salisbury', 'Wilkes-Barre', 'Grand Junction',
+                'Las Vegas', 'Leavenworth', 'Marion'],
+            6: ['Ann Arbor', 'San Juan', 'Black Hills', 'Fort Harrison', 'Indianapolis', 'Togus',
+                'Orlando', 'Loma Linda', 'Fayetteville, AR'],
+            7: ['NYN-New York Harbor','BYN-New York Harbor', 'Martinsburg', 'Iowa City', 'Denver', 'Fargo', 'Houston',
+                'Muskogee', 'Baltimore', 'Fresno', 'Wichita'],
+            8: ['White River Junction', 'Wilmington', 'Topeka', 'Fayetteville, NC', 'Sioux Falls',
+                'Temple (Central Texas)', 'Tucson', 'Shreveport', 'Jackson', 'West Los Angeles',
+                'Washington DC', 'Augusta']
+    }
+
+    }
+
+    # --- Assign sites to new teams ---
+    new_teams = {}
+    for k in range(1, num_providers + 1):
+        new_teams[k] = {site: get_census(site) for site in site_groups[num_providers][k]}
+
+    persist = {str(k): v for k, v in new_teams.items()}
+
+    # --- Build UI Tabs ---
+    tabs = []
+    for tnum, sites in new_teams.items():
+        grouped = {}
+        for site, count in sites.items():
+            cat = int(site_data_copy.loc[site_data_copy['facilityName'] == site, 'Categories'].iloc[0])
+            grouped.setdefault(cat, []).append((site, count))
+        elems = []
+        for cat in sorted(grouped):
+            color = "red" if cat in [1, 2] else "black"
+            elems.append(html.H6(f"Category {cat}", style={"color": color, "font-weight": "bold"}))
+            for s, c in sorted(grouped[cat]):
+                elems.append(html.P(f"{s} ({int(c)})", style={"color": color}))
+        tot = sum(sites.values())
+        card = dbc.Card(
+            dbc.CardBody([
+                html.H5(f"Provider Team {tnum}", style={"font-weight": "bold"}),
+                html.P(f"Total Patients: {int(tot)}"),
+                html.Div(elems)
+            ]),
+            style={"background-color": "#f7f7f7", "border": "1px solid #ddd",
+                   "border-radius": "10px", "box-shadow": "0 0 10px rgba(0,0,0,0.1)",
+                   "margin-bottom": "10px"}
+        )
+        tabs.append(dcc.Tab(label=f"Team {tnum}", value=str(tnum), children=[card]))
+
+    tabs_component = dcc.Tabs(id="provider-team-tabs", value='1', children=tabs) if tabs else html.P("No provider teams available.")
+    return tabs_component, persist
+
+
+# Cross-walk table reference:
+@app.callback(
+    Output('cross-walk-reference', 'children'),
+    [Input('rn-assignments', 'data'),
+     Input('provider-assignments', 'data'),
+     Input('num-providers', 'value')]
+)
+def update_cross_walk_reference(rn_assignments, provider_assignments, num_providers):
+    if not rn_assignments or not provider_assignments or num_providers is None:
+        return html.P("No cross-walk reference data available.")
+
+    num_providers = int(num_providers)
+    rn_assignments = {int(k): v for k, v in rn_assignments.items()}
+    provider_assignments = {int(k): v for k, v in provider_assignments.items()}
+
+    table_data = []
+    for team_num, sites in provider_assignments.items():
+        for site, count in sites.items():
+            match = site_data_copy[site_data_copy['facilityName'] == site]
+            if match.empty:
+                continue
+            rn_team = None
+            for rn, rn_sites in rn_assignments.items():
+                if site in rn_sites:
+                    rn_team = rn
+                    break
+            table_data.append({
+                'Site Name': site,
+                'Assigned RN': f'RN {rn_team}',
+                'Assigned Provider': f'Team {team_num}'
+            })
+
+    # Sort table data by site name
+    table_data.sort(key=lambda x: x['Site Name'])
+
+    table = dbc.Table(
+        [
+            html.Thead(
+                html.Tr([html.Th(col) for col in ['Site Name', 'Assigned RN', 'Assigned Provider']])
+            ),
+            html.Tbody(
+                [
+                    html.Tr([html.Td(row[col]) for col in ['Site Name', 'Assigned RN', 'Assigned Provider']])
+                    for row in table_data
+                ]
+            )
+        ]
+    )
+
+    return table
+
+@app.callback(
+    Output("download-dataframe-xlsx", "data"),
+    Input("export-btn", "n_clicks"),
+    State("rn-assignments", "data"),
+    State("cross-walk-reference", "children"),
+    State("provider-assignments", "data"),
+    State("aprn", "value"),
+    prevent_initial_call=True
+)
+def export_to_excel_updated(n_clicks, rn_assignments, cross_walk_reference, provider_assignments, aprn):
+    if not rn_assignments:
+        return dash.no_update
+
+    buffer = io.BytesIO()
+
+
+    with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+        workbook = writer.book
+        ws = workbook.add_worksheet("Dashboard Export")
+
+        # --------------------------
+        # Styles
+        # --------------------------
+        title_fmt = workbook.add_format({'bold': True, 'font_size': 18, 'font_color': 'white',
+                                         'align': 'left', 'bg_color': '#4472C4'})
+        section_fmt = workbook.add_format({'bold': True, 'font_color': '#1F4E79',
+                                           'font_size': 14, 'bottom': 2})
+        header_fmt = workbook.add_format({'bold': True, 'bg_color': '#D9E1F2',
+                                          'border': 1, 'align': 'left'})
+        bold_fmt = workbook.add_format({'bold': True, 'border': 0})
+        normal_fmt = workbook.add_format({'border': 0})
+        site_fmt = workbook.add_format({'indent': 1, 'border': 0})
+        blue_fmt = workbook.add_format({'color': 'blue', 'indent': 1, 'border': 0})
+        yellow_fmt = workbook.add_format({'bg_color': '#FFFF99', 'border': 1})
+        header_fmt_2 = workbook.add_format({'bold': True, 'font_size': 12, 'font_color': 'white',
+                                            'align': 'left', 'bg_color': '#525657'})
+        category_fmt_red = workbook.add_format({'bold': True, 'font_color': 'red',
+                                                'border': 0, 'bg_color': "#ECAC8F"})
+        category_fmt_black = workbook.add_format({'bold': True, 'font_color': 'white',
+                                                  'border': 0, 'bg_color': "#7A716D"})
+
+        # --------------------------
+        # Header Section
+        # --------------------------
+
+        ws.merge_range(0, 0, 0, 10, 'Combined Assignment Sheet', title_fmt)
+        ws.write(1, 0, 'Active Census', header_fmt_2)
+        ws.write(1, 1, f"{site_data['TotalCensus'].sum()} as of {site_data['Date'].iloc[0]}", normal_fmt)
+        ws.write(2, 0, 'RN Point of Contact', header_fmt_2)
+        ws.write(3, 0, 'Administrator on Call', header_fmt_2)
+        ws.write(4, 0, 'Charge Nurse', header_fmt_2)
+        row = 6
+
+        # --------------------------
+        # RN Distribution
+        # --------------------------
+        col = 0
+        ws.merge_range(row, col, row, col + 2, 'RN Distribution', section_fmt)
+        row += 2
+
+        for rn, site_dict in rn_assignments.items():
+            ws.write(row, col, f'RN {rn}', header_fmt)
+            ws.write(row + 1, col, 'Name: ', yellow_fmt)
+            ws.write(row + 2, col, 'Shift: ', yellow_fmt)
+            ws.write(row + 3, col, 'Phone Number: ', yellow_fmt)
+
+            current_row = row
+            total_patients = sum(site_dict.values())
+
+            for index, (site, patients) in enumerate(sorted(site_dict.items())):
+
+                current_row = row + index + 1
+                site_code = next((code for code in site_data_copy['OriginalSiteCode']
+                                  if site_data_copy.loc[
+                                      site_data_copy['OriginalSiteCode'] == code,
+                                      'facilityName'
+                                  ].iloc[0] == site), None)
+                fmt = blue_fmt if aprn == 1 and site_code in aprn_sites else site_fmt
+                ws.write(current_row, col + 1, site, fmt)
+                ws.write(current_row, col + 2, patients, normal_fmt)
+
+            ws.write(current_row + 1, col + 1, f'Total Patients: {total_patients}', header_fmt_2)
+            row = current_row + 3
+
+        # --------------------------
+        # Cross Walk Reference
+        # --------------------------
+        col = 4
+        ws.merge_range(6, col, 6, col + 2, 'Cross Walk Reference', section_fmt)
+        row = 8
+        cross_walk_table = cross_walk_reference['props']['children'][1]['props']['children']
+        for tr in cross_walk_table:
+            for i, td in enumerate(tr['props']['children']):
+                ws.write(row, col + i, td['props']['children'], normal_fmt)
+            row += 1
+
+        # --------------------------
+        # Provider Team Detail
+        # --------------------------
+        col = 8
+        row = 6
+        ws.merge_range(row, col, row, col + 2, 'Provider Team Detail', section_fmt)
+        row += 2
+
+        for team_num, sites in provider_assignments.items():
+            total_patients_per_team = 0
+            ws.merge_range(row, col, row, col + 2, f'Team {team_num}', header_fmt)
+            row += 1
+            ws.write(row, col, 'Name: ', yellow_fmt)
+            ws.write(row + 1, col, 'Shift: ', yellow_fmt)
+            ws.write(row + 2, col, 'Phone Number: ', yellow_fmt)
+            grouped_by_category = {}
+            for site, count in sites.items():
+                match = site_data_copy[site_data_copy['facilityName'] == site]
+                cat = int(match['Categories'].iloc[0])
+                grouped_by_category.setdefault(cat, []).append((site, count))
+
+            current_row = row
+            for cat in sorted(grouped_by_category.keys()):
+                cat_fmt = category_fmt_red if cat in [1, 2] else category_fmt_black
+                ws.write(current_row, col + 1, f"Category {cat}", cat_fmt)
+                current_row += 1
+                for site, cnt in sorted(grouped_by_category[cat]):
+                    total_patients_per_team += cnt
+                    site_code = next((code for code in site_data_copy['OriginalSiteCode']
+                                      if site_data_copy.loc[
+                                          site_data_copy['OriginalSiteCode'] == code,
+                                          'facilityName'
+                                      ].iloc[0] == site), None)
+                    fmt = blue_fmt if aprn == 1 and site_code in aprn_sites else site_fmt
+                    ws.write(current_row, col + 1, site, fmt)
+                    ws.write(current_row, col + 2, int(cnt), normal_fmt)
+                    current_row += 1
+            ws.write(current_row, col + 1, f'Est. Total Patients: {int(total_patients_per_team)}', header_fmt_2)
+            row = current_row + 3
+
+
+
+        # --------------------------
+        # MSA Distribution & APRN Reference Group
+        # --------------------------
+        col = 12
+        row = 6
+        ws.merge_range(row, col, row, col + 2, 'MSA Distribution', section_fmt)
+        row += 2
+        for msa in range(1, 6):
+            ws.write(row, col, f'MSA {msa}', header_fmt)
+            ws.write(row + 1, col, 'Name: ', yellow_fmt)
+            ws.write(row + 2, col, 'Shift: ', yellow_fmt)
+            ws.write(row + 3, col, 'Phone Number: ', yellow_fmt)
+            row += 5
+
+        if aprn == 1:
+            aprn_sites_df = site_data_copy[site_data_copy['OriginalSiteCode'].isin(aprn_sites)]
+            aprn_sites_grouped = aprn_sites_df.groupby('OriginalSiteCode').agg({
+                'TotalCensus': 'sum',
+                'facilityName': lambda x: list(x)[0]
+            }).reset_index()
+
+            ws.merge_range(row, col, row, col + 2, 'APRN Reference Group', section_fmt)
+            row += 2
+            ws.write(row, col, 'Facility', bold_fmt)
+            ws.write(row, col + 1, 'Patients', bold_fmt)
+            row += 1
+
+            for _, site in aprn_sites_grouped.iterrows():
+                ws.write(row, col, site['facilityName'], blue_fmt)
+                ws.write(row, col + 1, site['TotalCensus'], normal_fmt)
+                row += 1
+
+        # --------------------------
+        # Final formatting
+        # --------------------------
+
+        ws.set_column('A:A', 25)
+        ws.set_column('B:B', 20)
+        ws.set_column('C:C', 8)
+        ws.set_column('D:D', 8)
+        ws.set_column('E:E', 25)
+        ws.set_column('F:F', 8)
+        ws.set_column('G:G', 8)
+        ws.set_column('H:H', 8)
+        ws.set_column('I:I', 25)
+        ws.set_column('J:J', 25)
+        ws.set_column('K:K', 8)
+        ws.set_column('L:L', 8)
+        ws.set_column('M:M', 25)
+        ws.set_column('N:N', 25)
+        ws.hide_gridlines(2)
+
+    buffer.seek(0)
+
+    utc_now = datetime.now(timezone.utc)
+    eastern = pytz.timezone('US/Eastern')
+    eastern_now = utc_now.astimezone(eastern)
+    eastern_now_str = eastern_now.strftime('%Y.%m.%d_%H.%M.%S')
+
+    filename = f"Scheduling_Tool_Dashboard_{eastern_now_str}.xlsx"
+
+    return dcc.send_bytes(buffer.getvalue(), filename=filename)
+
+if __name__ == '__main__':
+    app.run(debug=True)
