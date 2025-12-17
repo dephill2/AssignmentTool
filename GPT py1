@@ -1,0 +1,131 @@
+=PY("
+import pandas as pd
+
+def run_engine(role='RN'):
+    if role == 'RN':
+        count_name = 'RN_Count'
+        prev_table = 'RN_Previous[#All]'
+        prefix = 'Nurse'
+        default_count = 18
+        weight_name = 'RN_ContinuityWeight'
+    else:
+        count_name = 'MD_Count'
+        prev_table = 'MD_Previous[#All]'
+        prefix = 'MD Team'
+        default_count = 4
+        weight_name = 'MD_ContinuityWeight'
+
+    census_raw = xl('CensusTable[#All]', headers=True)
+    census = census_raw.iloc[:, [0, 2]].copy()
+    census.columns = ['SiteCode', 'TotalCensus']
+
+    census['SiteCode'] = census['SiteCode'].astype(str).str.strip()
+    census['TotalCensus'] = pd.to_numeric(census['TotalCensus'], errors='coerce')
+    census = census.dropna(subset=['TotalCensus'])
+    census = census[census['SiteCode'].ne('')].copy()
+    census['TotalCensus'] = census['TotalCensus'].astype(int)
+
+    expected_sites = set(census['SiteCode'])
+    expected_total = int(census['TotalCensus'].sum())
+
+    try:
+        count_val = xl(count_name)
+        count = int(count_val.iloc[0].iloc[0]) if hasattr(count_val, 'iloc') else int(count_val)
+    except:
+        count = default_count
+
+    try:
+        continuity_weight = float(xl(weight_name))
+    except:
+        continuity_weight = 5.0
+
+    staff_ids = [f'{prefix} {i+1}' for i in range(count)]
+
+    prev_map = {}
+    try:
+        prev = xl(prev_table, headers=True)
+    except:
+        prev = None
+
+    if prev is not None and isinstance(prev, pd.DataFrame) and not prev.empty:
+        p = prev.iloc[:, :2].copy()
+        p.columns = ['StaffID', 'SiteCode']
+        p['StaffID'] = p['StaffID'].astype(str).str.strip()
+        p['SiteCode'] = p['SiteCode'].astype(str).str.strip()
+        p = p[(p['StaffID'].ne('')) & (p['SiteCode'].ne(''))]
+        prev_map = p.groupby('StaffID')['SiteCode'].apply(lambda x: set(x)).to_dict()
+
+    site_census = dict(zip(census['SiteCode'], census['TotalCensus']))
+
+    working = site_census.copy()
+    CLUSTER_KEY = 'SPO_DOD_CLUSTER'
+    clustered = False
+    if 'SPO' in working and 'DOD' in working:
+        working[CLUSTER_KEY] = working.pop('SPO') + working.pop('DOD')
+        clustered = True
+
+    sorted_sites = sorted(working.items(), key=lambda x: x[1], reverse=True)
+
+    conflict_sets = [
+        {'FAV', 'FNC'},
+        {'CMO', 'CMS'},
+    ]
+
+    def violates_conflict(existing_sites, new_site):
+        ss = set(existing_sites)
+        for s in conflict_sets:
+            if new_site in s and len(s.intersection(ss)) > 0:
+                return True
+        return False
+
+    def is_incumbent(staff_id, site):
+        incumbents = prev_map.get(staff_id, set())
+        if site == CLUSTER_KEY and clustered:
+            return ('SPO' in incumbents) or ('DOD' in incumbents)
+        return site in incumbents
+
+    staff_state = {s: {'load': 0, 'sites': []} for s in staff_ids}
+
+    for site, load in sorted_sites:
+        def score(staff_id):
+            current_load = staff_state[staff_id]['load']
+            current_sites = staff_state[staff_id]['sites']
+
+            if violates_conflict(current_sites, site):
+                return (10**9, 10**9, 10**9, staff_id)
+
+            penalty = 0.0 if is_incumbent(staff_id, site) else continuity_weight
+            projected = current_load + load + penalty
+            return (projected, len(current_sites), current_load, staff_id)
+
+        best = min(staff_ids, key=score)
+        staff_state[best]['load'] += load
+        staff_state[best]['sites'].append(site)
+
+    rows = []
+    for staff_id, d in staff_state.items():
+        for assigned_site in d['sites']:
+            if assigned_site == CLUSTER_KEY and clustered:
+                for sub in ['SPO', 'DOD']:
+                    rows.append({'StaffID': staff_id, 'SiteCode': sub, 'PatientCount': int(site_census.get(sub, 0))})
+            else:
+                rows.append({'StaffID': staff_id, 'SiteCode': assigned_site, 'PatientCount': int(site_census.get(assigned_site, 0))})
+
+    out = pd.DataFrame(rows)
+
+    assigned_sites = set(out['SiteCode'])
+    missing = expected_sites - assigned_sites
+    extra = assigned_sites - expected_sites
+    assigned_total = int(out['PatientCount'].sum())
+
+    if missing:
+        raise ValueError(f'{role} output missing sites: {sorted(list(missing))}')
+    if extra:
+        raise ValueError(f'{role} output has unexpected sites: {sorted(list(extra))}')
+    if assigned_total != expected_total:
+        raise ValueError(f'{role} total mismatch: assigned={assigned_total}, expected={expected_total}')
+
+    return out.sort_values(['StaffID', 'SiteCode']).reset_index(drop=True)
+
+run_engine('RN')
+")
